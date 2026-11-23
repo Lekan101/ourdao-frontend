@@ -471,3 +471,30 @@ export function useMembers(limit = 50) {
     refetch,
   }
 }
+
+/**
+ * The address `delegator` has delegated their vote to, or `null` when they have
+ * not delegated. Reads `get_delegate` (#601).
+ */
+export function useDelegate(delegator?: string | null) {
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: delegator ? queryKeys.delegate(delegator) : queryKeys.delegateDisabled(),
+    enabled: !!delegator && isContractConfigured(),
+    queryFn: () => daoRead.getDelegate(delegator!),
+  })
+  return { delegate: data ?? null, isLoading, isError, refetch }
+}
+
+/**
+ * The voting weight the contract reports for `member` (`get_voting_weight`).
+ * `votingWeight` is `null` until the read lands and stays `null` on failure, so
+ * callers never show a made-up zero (#603).
+ */
+export function useVotingWeight(member?: string | null) {
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: member ? queryKeys.votingWeight(member) : queryKeys.votingWeightDisabled(),
+    enabled: !!member && isContractConfigured(),
+    queryFn: () => daoRead.getVotingWeight(member!),
+  })
+  return { votingWeight: data == null ? null : Number(data), isLoading, isError, refetch }
+}

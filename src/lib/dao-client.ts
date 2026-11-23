@@ -485,6 +485,13 @@ export async function invoke(
 // Typed read wrappers (mirror the Rust contract views)
 // ---------------------------------------------------------------------------
 
+/**
+ * Reads for contract methods the pinned generated bindings do not include yet
+ * (`dao-bindings.ts` is not regenerated here), so they are encoded by hand.
+ */
+const readUnbound = <T = unknown>(method: string, ...args: xdr.ScVal[]): Promise<T | null> =>
+  isContractConfigured() ? readContract<T>(CONTRACT_ID, method, ...args) : Promise.resolve(null)
+
 export const daoRead = {
   getTotalMembers: (): Promise<number | null> => read('get_total_members'),
   getActiveMembers: (): Promise<number | null> => read('get_active_members'),
@@ -502,6 +509,12 @@ export const daoRead = {
   getPendingYield: (member: string): Promise<bigint | null> =>
     read('get_pending_yield', { member }),
   getStake: (member: string): Promise<bigint | null> => read('get_stake', { member }),
+  // The address `delegator` delegated their vote to, or null for none (#601).
+  getDelegate: (delegator: string): Promise<string | null> =>
+    readUnbound<string>('get_delegate', new Address(delegator).toScVal()),
+  // The contract's effective voting weight for `member` (#603).
+  getVotingWeight: (member: string): Promise<bigint | null> =>
+    readUnbound<bigint>('get_voting_weight', new Address(member).toScVal()),
   getLoan: (id: number): Promise<Raw<Loan> | null> => read('get_loan', { loan_id: id }),
   getLoanProposal: (id: number): Promise<Raw<LoanProposal> | null> =>
     read('get_loan_proposal', { proposal_id: id }),
@@ -543,6 +556,10 @@ export function daoWrite(
 ) {
   const send = <M extends ContractMethod>(method: M, ...args: CallArgs<M>) =>
     invoke(address, signXDR, method, ...encodeArgs(method, ...args))
+
+  // Same as `send`, for methods the pinned generated bindings do not include yet.
+  const sendUnbound = (method: string, ...args: xdr.ScVal[]) =>
+    invoke(address, signXDR, method, ...args)
 
   return {
     registerMember: () => send('register_member', { member: address }),
@@ -639,6 +656,19 @@ export function daoWrite(
         proposal_id: proposalId,
         content_hash: bytes(contentHash),
       }),
+
+    // Not in the pinned generated bindings yet; encoded by hand (#601, #605).
+    delegateVote: (delegatee: string) =>
+      sendUnbound(
+        'delegate_vote',
+        new Address(address).toScVal(),
+        new Address(delegatee).toScVal()
+      ),
+    // A proposer may withdraw their own proposal during its editing window (#605).
+    cancelLoanProposal: (proposalId: number) =>
+      sendUnbound('cancel_loan_proposal', new Address(address).toScVal(), xdr.ScVal.scvU32(proposalId)),
+    cancelTreasuryProposal: (proposalId: number) =>
+      sendUnbound('cancel_treasury_proposal', new Address(address).toScVal(), xdr.ScVal.scvU32(proposalId)),
 
     // Admin-only entrypoints. The contract itself enforces the admin check
     // (`util::require_admin`) — `address` here is the connected wallet acting

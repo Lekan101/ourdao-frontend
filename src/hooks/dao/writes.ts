@@ -296,6 +296,17 @@ export function useEditLoanProposal() {
   return { editLoanProposal, isPending, error, isSuccess, cancelSignature }
 }
 
+/** Delegate the connected member's vote to another active member (#601). */
+export function useDelegateVote() {
+  const { run, isPending, isSuccess, error, address, cancelSignature } = useWriteAction()
+  const delegate = (delegatee: string) =>
+    run('Delegating vote', (w) => w.delegateVote(delegatee), [
+      queryKeys.delegate(address!),
+      queryKeys.userData(address!),
+    ])
+  return { delegate, isPending, error, isSuccess, cancelSignature }
+}
+
 export function useVoting() {
   const { run, isPending, isSuccess, error, address, cancelSignature } = useWriteAction()
   const voteOnProposal = (proposalId: number, support: boolean) =>
