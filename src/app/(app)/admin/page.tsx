@@ -17,7 +17,10 @@ import {
   useAdminActions,
   useAdminLog,
   useFailedEvents,
+  useReEvaluateFailedEvent,
+  useBatchResolveFailedEvents,
 } from '@/hooks/useDAO'
+import type { FailedEventResolution } from '@/lib/backend'
 import { AddressLink } from '@/components/AddressLink'
 import { LoadError } from '@/components/LoadError'
 import { useAnnounceLoad } from '@/lib/useAnnounceLoad'
@@ -372,6 +375,47 @@ function ActivityTab() {
 
 function QuarantinedEventsTab() {
   const { failedEvents, isLoading, isError, refetch } = useFailedEvents()
+  const {
+    reEvaluate,
+    isPending: isReEvaluating,
+    error: reEvaluateError,
+    result: reEvaluateResult,
+  } = useReEvaluateFailedEvent()
+  const {
+    batchResolve,
+    isPending: isResolving,
+    error: batchError,
+    result: batchResult,
+  } = useBatchResolveFailedEvents()
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [resolution, setResolution] = useState<FailedEventResolution | ''>('')
+  const [note, setNote] = useState('')
+
+  const numericIds = failedEvents
+    .map((ev) => Number(ev.id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+  const allSelected = numericIds.length > 0 && numericIds.every((id) => selectedIds.includes(id))
+  const isBusy = isReEvaluating || isResolving
+
+  const toggleAll = () => {
+    setSelectedIds(allSelected ? [] : numericIds)
+  }
+  const toggleOne = (id: number) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]))
+  }
+
+  const submitBatch = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!resolution || selectedIds.length === 0) return
+    const message = `Resolve ${selectedIds.length} selected quarantined event(s) as ${resolution}?`
+    if (!window.confirm(message)) return
+    const outcome = await batchResolve({ ids: selectedIds, resolution, note: note.trim() || undefined })
+    if (outcome) {
+      setSelectedIds([])
+      setResolution('')
+      setNote('')
+    }
+  }
 
   return (
     <div className="bg-card rounded-lg border border-border">
@@ -383,6 +427,69 @@ function QuarantinedEventsTab() {
           Events that failed indexer handler processing and are quarantined for investigation.
         </p>
       </div>
+      {(reEvaluateError || batchError) && (
+        <p role="alert" className="mx-6 mt-4 text-sm text-red-600 dark:text-red-400">
+          {reEvaluateError ?? batchError}
+        </p>
+      )}
+      {batchResult && (
+        <p role="status" className="mx-6 mt-4 text-sm text-green-600 dark:text-green-400">
+          Resolved {batchResult.resolved} event(s). Already-resolved events were skipped.
+        </p>
+      )}
+      <form onSubmit={submitBatch} className="px-6 py-4 border-b border-border flex flex-wrap items-end gap-4">
+        <div className="flex items-center gap-2">
+          <input
+            id="select-all-failed-events"
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleAll}
+            disabled={numericIds.length === 0 || isBusy}
+          />
+          <label htmlFor="select-all-failed-events" className="text-sm text-foreground">
+            Select all
+          </label>
+        </div>
+        <fieldset className="flex items-center gap-4">
+          <legend className="sr-only">Resolution</legend>
+          {(['resolved', 'ignored'] as const).map((value) => (
+            <div key={value} className="flex items-center gap-2">
+              <input
+                id={`resolution-${value}`}
+                type="radio"
+                name="resolution"
+                value={value}
+                checked={resolution === value}
+                onChange={() => setResolution(value)}
+                disabled={isBusy}
+              />
+              <label htmlFor={`resolution-${value}`} className="text-sm capitalize text-foreground">
+                {value}
+              </label>
+            </div>
+          ))}
+        </fieldset>
+        <div className="flex items-center gap-2">
+          <label htmlFor="batch-resolve-note" className="text-sm text-foreground">
+            Note (optional)
+          </label>
+          <input
+            id="batch-resolve-note"
+            type="text"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Why these events are being resolved"
+            className="px-3 py-2 border border-input rounded-md bg-background text-sm"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={selectedIds.length === 0 || !resolution || isBusy}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+        >
+          Resolve selected
+        </button>
+      </form>
       <div className="divide-y divide-border">
         {isLoading && <div className="px-6 py-4 text-sm text-muted-foreground">Loading quarantined events…</div>}
         {isError && <LoadError what="quarantined events" onRetry={() => void refetch()} className="m-4" />}
@@ -391,25 +498,63 @@ function QuarantinedEventsTab() {
             No quarantined events found. All handlers operating cleanly.
           </div>
         )}
-        {failedEvents.map((ev) => (
-          <div key={ev.id} className="px-6 py-4 flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <span className="px-2 py-1 text-xs font-mono bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded">
-                  {ev.symbol}
-                </span>
-                <span className="text-sm font-medium text-foreground">Ledger #{ev.ledger}</span>
-                {ev.retry_count !== undefined && (
-                  <span className="text-xs text-muted-foreground">Retries: {ev.retry_count}</span>
-                )}
+        {failedEvents.map((ev) => {
+          const numericId = Number(ev.id)
+          const selectable = Number.isInteger(numericId) && numericId > 0
+          const outcome =
+            reEvaluateResult && String(reEvaluateResult.eventId) === String(ev.id)
+              ? reEvaluateResult.status === 'still_failing'
+                ? 'Still failing'
+                : `Re-evaluated: ${reEvaluateResult.status}`
+              : null
+          return (
+            <div key={ev.id} className="px-6 py-4 flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-3">
+                  {selectable && (
+                    <>
+                      <label htmlFor={`failed-event-${ev.id}`} className="sr-only">
+                        Select event {ev.id}
+                      </label>
+                      <input
+                        id={`failed-event-${ev.id}`}
+                        type="checkbox"
+                        checked={selectedIds.includes(numericId)}
+                        onChange={() => toggleOne(numericId)}
+                      />
+                    </>
+                  )}
+                  <span className="px-2 py-1 text-xs font-mono bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded">
+                    {ev.symbol}
+                  </span>
+                  <span className="text-sm font-medium text-foreground">Ledger #{ev.ledger}</span>
+                  {ev.retry_count !== undefined && (
+                    <span className="text-xs text-muted-foreground">Retries: {ev.retry_count}</span>
+                  )}
+                  {outcome && (
+                    <span role="status" className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                      {outcome}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-3">
+                  <span className="text-xs text-muted-foreground">{formatDate(ev.created_at)}</span>
+                  <button
+                    type="button"
+                    onClick={() => void reEvaluate(ev.id)}
+                    disabled={isBusy}
+                    className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted disabled:opacity-50"
+                  >
+                    Re-evaluate event {ev.id}
+                  </button>
+                </div>
               </div>
-              <span className="text-xs text-muted-foreground">{formatDate(ev.created_at)}</span>
+              <div className="text-xs font-mono text-red-600 dark:text-red-400 mt-1 bg-red-50 dark:bg-red-950/20 p-2 rounded">
+                {ev.error}
+              </div>
             </div>
-            <div className="text-xs font-mono text-red-600 dark:text-red-400 mt-1 bg-red-50 dark:bg-red-950/20 p-2 rounded">
-              {ev.error}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

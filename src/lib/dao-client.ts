@@ -563,8 +563,12 @@ export function daoWrite(
         proposal_id: proposalId,
         new_amount: BigInt(newAmount),
       }),
+    cancelLoanProposal: (proposalId: number) =>
+      send('cancel_loan_proposal', { borrower: address, proposal_id: proposalId }),
     voteOnLoanProposal: (proposalId: number, support: boolean) =>
       send('vote_on_loan_proposal', { voter: address, proposal_id: proposalId, support }),
+    expireLoanProposal: (proposalId: number) =>
+      send('expire_loan_proposal', { proposal_id: proposalId }),
     repayLoan: (loanId: number) =>
       send('repay_loan', { borrower: address, loan_id: loanId }),
     // Partial repayment — amount is applied to accrued interest first, then
@@ -583,11 +587,14 @@ export function daoWrite(
       send('mark_loan_defaulted', { loan_id: loanId }),
 
     // Permissionless and idempotent from `ApprovedPendingDisbursement`: completes
-    // an approved loan once the treasury can cover it (#540).
+    // an approved loan once the treasury can cover it (#540). The contract
+    // rejects with `ProposalNotFound`, `NotInVotingPhase`, `Paused` or
+    // `InsufficientTreasury` if the proposal is no longer eligible.
     disburseApprovedLoan: (proposalId: number) =>
       send('disburse_approved_loan', { proposal_id: proposalId }),
 
-    // Same, for an approved treasury withdrawal (#540).
+    // Same, for an approved treasury withdrawal (#540). Rejects with
+    // `ProposalNotFound`, `NotInVotingPhase`, `Paused` or `InsufficientTreasury`.
     executeTreasuryProposal: (proposalId: number) =>
       send('execute_treasury_proposal', { proposal_id: proposalId }),
 
@@ -604,12 +611,16 @@ export function daoWrite(
         reason,
         private: isPrivate,
       }),
+    cancelTreasuryProposal: (proposalId: number) =>
+      send('cancel_treasury_proposal', { proposer: address, proposal_id: proposalId }),
     voteOnTreasuryProposal: (proposalId: number, support: boolean) =>
       send('vote_on_treasury_proposal', {
         voter: address,
         proposal_id: proposalId,
         support,
       }),
+    expireTreasuryProposal: (proposalId: number) =>
+      send('expire_treasury_proposal', { proposal_id: proposalId }),
 
     stake: (amount: bigint | number) =>
       send('stake', { member: address, amount: BigInt(amount) }),

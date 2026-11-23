@@ -89,7 +89,9 @@ describe('daoWrite — method name and ScVal argument types per entrypoint', () 
     ['claimRewards', (w) => w.claimRewards(), 'claim_rewards', ['scvAddress']],
     ['requestLoan', (w) => w.requestLoan(BigInt(100)), 'request_loan', ['scvAddress', 'scvI128', 'scvVoid']],
     ['editLoanProposal', (w) => w.editLoanProposal(1, BigInt(50)), 'edit_loan_proposal', ['scvAddress', 'scvU32', 'scvI128']],
+    ['cancelLoanProposal', (w) => w.cancelLoanProposal(1), 'cancel_loan_proposal', ['scvAddress', 'scvU32']],
     ['voteOnLoanProposal', (w) => w.voteOnLoanProposal(1, true), 'vote_on_loan_proposal', ['scvAddress', 'scvU32', 'scvBool']],
+    ['expireLoanProposal', (w) => w.expireLoanProposal(1), 'expire_loan_proposal', ['scvU32']],
     ['repayLoan', (w) => w.repayLoan(2), 'repay_loan', ['scvAddress', 'scvU32']],
     ['repayLoanPartial', (w) => w.repayLoanPartial(2, BigInt(10)), 'repay_loan_partial', ['scvAddress', 'scvU32', 'scvI128']],
     // Permissionless: no caller argument.
@@ -102,7 +104,9 @@ describe('daoWrite — method name and ScVal argument types per entrypoint', () 
       'propose_treasury_withdrawal',
       ['scvAddress', 'scvI128', 'scvAddress', 'scvString', 'scvBool'],
     ],
+    ['cancelTreasuryProposal', (w) => w.cancelTreasuryProposal(4), 'cancel_treasury_proposal', ['scvAddress', 'scvU32']],
     ['voteOnTreasuryProposal', (w) => w.voteOnTreasuryProposal(4, false), 'vote_on_treasury_proposal', ['scvAddress', 'scvU32', 'scvBool']],
+    ['expireTreasuryProposal', (w) => w.expireTreasuryProposal(4), 'expire_treasury_proposal', ['scvU32']],
     ['stake', (w) => w.stake(BigInt(7)), 'stake', ['scvAddress', 'scvI128']],
     ['unstake', (w) => w.unstake(BigInt(7)), 'unstake', ['scvAddress', 'scvI128']],
     ['registerName', (w) => w.registerName('alice'), 'register_name', ['scvAddress', 'scvString']],
@@ -140,6 +144,13 @@ describe('daoWrite — method name and ScVal argument types per entrypoint', () 
     await daoWrite(WALLET, signXDR).stake(BigInt(1))
     const { args } = invokedCall(signed[0])
     expect(Address.fromScVal(args[0]).toString()).toBe(WALLET)
+  })
+
+  it('passes the connected wallet as borrower/proposer when cancelling', async () => {
+    await daoWrite(WALLET, signXDR).cancelLoanProposal(1)
+    await daoWrite(WALLET, signXDR).cancelTreasuryProposal(2)
+    expect(Address.fromScVal(invokedCall(signed[0]).args[0]).toString()).toBe(WALLET)
+    expect(Address.fromScVal(invokedCall(signed[1]).args[0]).toString()).toBe(WALLET)
   })
 
   it('propagates a signer rejection and never submits', async () => {

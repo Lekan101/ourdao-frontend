@@ -48,6 +48,7 @@ vi.mock('@/hooks/useDAO', () => ({
     refetch: vi.fn(),
   }),
   useTreasuryVoting: () => ({ voteOnTreasury: vi.fn(), isPending: false }),
+  useExpireProposal: () => ({ expireTreasuryProposal: vi.fn(), isPending: false }),
   useHasVoted: () => ({ hasVoted: false }),
   useToken: () => mockToken,
 }))

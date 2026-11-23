@@ -296,6 +296,64 @@ export function useEditLoanProposal() {
   return { editLoanProposal, isPending, error, isSuccess, cancelSignature }
 }
 
+type ProposalKindName = 'Loan' | 'Treasury'
+
+const proposalMutationKeys = (kind: ProposalKindName, proposalId: number, address: string) => [
+  kind === 'Loan' ? queryKeys.loanProposal(proposalId) : queryKeys.treasuryProposal(proposalId),
+  kind === 'Loan' ? queryKeys.loanProposalsAll() : queryKeys.treasuryProposalsAll(),
+  queryKeys.userData(address),
+  queryKeys.daoStats(),
+  queryKeys.backendStats(),
+]
+
+export function useCancelProposal() {
+  const { run, isPending, isSuccess, error, address, cancelSignature } = useWriteAction()
+  const cancelProposal = (kind: ProposalKindName, proposalId: number) =>
+    run(
+      kind === 'Loan' ? 'Cancelling loan proposal' : 'Cancelling treasury proposal',
+      (w) =>
+        kind === 'Loan'
+          ? w.cancelLoanProposal(proposalId)
+          : w.cancelTreasuryProposal(proposalId),
+      proposalMutationKeys(kind, proposalId, address!)
+    )
+  const cancelLoanProposal = (proposalId: number) => cancelProposal('Loan', proposalId)
+  const cancelTreasuryProposal = (proposalId: number) => cancelProposal('Treasury', proposalId)
+  return {
+    cancelProposal,
+    cancelLoanProposal,
+    cancelTreasuryProposal,
+    isPending,
+    error,
+    isSuccess,
+    cancelSignature,
+  }
+}
+
+export function useExpireProposal() {
+  const { run, isPending, isSuccess, error, address, cancelSignature } = useWriteAction()
+  const expireProposal = (kind: ProposalKindName, proposalId: number) =>
+    run(
+      kind === 'Loan' ? 'Finalizing loan proposal' : 'Finalizing treasury proposal',
+      (w) =>
+        kind === 'Loan'
+          ? w.expireLoanProposal(proposalId)
+          : w.expireTreasuryProposal(proposalId),
+      proposalMutationKeys(kind, proposalId, address!)
+    )
+  const expireLoanProposal = (proposalId: number) => expireProposal('Loan', proposalId)
+  const expireTreasuryProposal = (proposalId: number) => expireProposal('Treasury', proposalId)
+  return {
+    expireProposal,
+    expireLoanProposal,
+    expireTreasuryProposal,
+    isPending,
+    error,
+    isSuccess,
+    cancelSignature,
+  }
+}
+
 export function useVoting() {
   const { run, isPending, isSuccess, error, address, cancelSignature } = useWriteAction()
   const voteOnProposal = (proposalId: number, support: boolean) =>
@@ -434,13 +492,19 @@ export function useDisburseApprovedLoan() {
   return { disburseApprovedLoan, isPending, error, isSuccess, cancelSignature }
 }
 
+export function useDisburseLoan() {
+  const action = useDisburseApprovedLoan()
+  return { ...action, disburseLoan: action.disburseApprovedLoan }
+}
+
 /** Executes a treasury withdrawal approved while the treasury was short (#540). */
 export function useExecuteTreasuryProposal() {
-  const { run, isPending, isSuccess, error, cancelSignature } = useWriteAction()
+  const { run, isPending, isSuccess, error, address, cancelSignature } = useWriteAction()
   const executeTreasuryProposal = (proposalId: number) =>
     run('Executing treasury withdrawal', (w) => w.executeTreasuryProposal(proposalId), [
       queryKeys.treasuryProposal(proposalId),
       queryKeys.treasuryProposalsAll(),
+      queryKeys.userData(address!),
       queryKeys.daoStats(),
       queryKeys.backendStats(),
     ])
