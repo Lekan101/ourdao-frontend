@@ -95,6 +95,8 @@ describe('daoWrite — method name and ScVal argument types per entrypoint', () 
     // Permissionless: no caller argument.
     ['markLoanDefaulted', (w) => w.markLoanDefaulted(3), 'mark_loan_defaulted', ['scvU32']],
     ['disburseApprovedLoan', (w) => w.disburseApprovedLoan(5), 'disburse_approved_loan', ['scvU32']],
+    ['expireLoanProposal', (w) => w.expireLoanProposal(7), 'expire_loan_proposal', ['scvU32']],
+    ['expireTreasuryProposal', (w) => w.expireTreasuryProposal(8), 'expire_treasury_proposal', ['scvU32']],
     ['executeTreasuryProposal', (w) => w.executeTreasuryProposal(6), 'execute_treasury_proposal', ['scvU32']],
     [
       'proposeTreasuryWithdrawal',

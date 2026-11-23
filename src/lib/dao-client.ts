@@ -599,6 +599,14 @@ export function daoWrite(
     markLoanDefaulted: (loanId: number) =>
       send('mark_loan_defaulted', { loan_id: loanId }),
 
+    // Permissionless: moves a loan proposal out of "voting" once its window has
+    // passed (#606). Takes only the proposal id.
+    expireLoanProposal: (proposalId: number) =>
+      send('expire_loan_proposal', { proposal_id: proposalId }),
+    // Permissionless: same transition for a treasury proposal (#606).
+    expireTreasuryProposal: (proposalId: number) =>
+      send('expire_treasury_proposal', { proposal_id: proposalId }),
+
     // Permissionless and idempotent from `ApprovedPendingDisbursement`: completes
     // an approved loan once the treasury can cover it (#540).
     // Contract errors (contracts/dao/src/loans.rs, `disburse_approved_loan`):
