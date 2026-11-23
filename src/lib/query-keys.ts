@@ -75,6 +75,9 @@ export const queryKeys = {
   daoToken: () => ['daoToken'] as const,
   tokenMetadata: (tokenId: string) => ['tokenMetadata', tokenId] as const,
   tokenBalance: (tokenId: string, address: Address) => ['tokenBalance', tokenId, address] as const,
+  whitelistedTokens: () => ['whitelistedTokens'] as const,
+  assetBalance: (tokenId: string | null | undefined, address: Address | null) => ['assetBalance', tokenId, address] as const,
+  contractInfo: () => ['contractInfo'] as const,
 }
 
 export const allWalletScopedQueryKeys = (): QueryKey[] => [
