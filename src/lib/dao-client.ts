@@ -528,6 +528,7 @@ export const daoRead = {
   nameOf: (owner: string): Promise<string | null> => read('name_of', { owner }),
   getDocument: (k: 'Loan' | 'Treasury', id: number): Promise<Uint8Array | null> =>
     read('get_document', { kind: kind(k), proposal_id: id }),
+  getPendingPolicyUpdate: (): Promise<unknown> => read('get_pending_policy_update'),
   // For a private (commit-reveal) treasury proposal this is true as soon as
   // `voter` has committed, not only once revealed — the contract folds both
   // into one bool since a commitment already blocks a second vote. There is
@@ -696,6 +697,16 @@ export function daoWrite(
       send('set_loan_policy', { caller: address, policy }),
     pause: () => send('pause', { caller: address }),
     unpause: () => send('unpause', { caller: address }),
+
+    // Pauser role (#553)
+    setPauser: (pauser: string) => send('set_pauser', { caller: address, pauser }),
+    revokePauser: () => send('revoke_pauser', { caller: address }),
+
+    // Governed loan-policy update flow (#553)
+    proposePolicyUpdate: (policy: LoanPolicy) =>
+      send('propose_policy_update', { caller: address, policy }),
+    executePolicyUpdate: () => send('execute_policy_update', { caller: address }),
+    cancelPolicyUpdate: () => send('cancel_policy_update', { caller: address }),
   }
 }
 

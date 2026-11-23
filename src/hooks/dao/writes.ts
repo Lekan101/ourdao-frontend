@@ -6,7 +6,7 @@ import React from 'react'
 import toast from 'react-hot-toast'
 import { useWallet } from '@/lib/wallet'
 import { getTransactionUrl } from '@/lib/stellar'
-import { daoWrite, InvokeError, TransactionPendingError, watchTransaction, type InvokeResult } from '@/lib/dao-client'
+import { daoWrite, InvokeError, TransactionPendingError, watchTransaction, type InvokeResult, type DaoWrite } from '@/lib/dao-client'
 import { queryKeys } from '@/lib/query-keys'
 import { announce } from '@/lib/announce'
 import { reportError } from '@/lib/error-reporting'
@@ -546,4 +546,24 @@ export function useAdminActions() {
       queryKeys.daoStats(),
     ])
   return { pause, unpause, addAdmin, removeAdmin, setThreshold, isPending, isSuccess, error, cancelSignature }
+}
+
+export function usePauserActions() {
+  const { run, isPending, isSuccess, error, cancelSignature } = useWriteAction()
+  const setPauser = (pauser: string) =>
+    run('Setting pauser', (w) => w.setPauser(pauser), [queryKeys.daoStats()])
+  const revokePauser = () =>
+    run('Revoking pauser', (w) => w.revokePauser(), [queryKeys.daoStats()])
+  return { setPauser, revokePauser, isPending, isSuccess, error, cancelSignature }
+}
+
+export function usePolicyUpdateActions() {
+  const { run, isPending, isSuccess, error, cancelSignature } = useWriteAction()
+  const proposePolicyUpdate = (policy: DaoWrite['proposePolicyUpdate'] extends (p: infer P) => unknown ? P : never) =>
+    run('Proposing policy update', (w) => w.proposePolicyUpdate(policy), [queryKeys.daoStats()])
+  const executePolicyUpdate = () =>
+    run('Executing policy update', (w) => w.executePolicyUpdate(), [queryKeys.daoStats()])
+  const cancelPolicyUpdate = () =>
+    run('Cancelling policy update', (w) => w.cancelPolicyUpdate(), [queryKeys.daoStats()])
+  return { proposePolicyUpdate, executePolicyUpdate, cancelPolicyUpdate, isPending, isSuccess, error, cancelSignature }
 }
