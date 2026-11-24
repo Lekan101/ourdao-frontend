@@ -614,6 +614,23 @@ export function useAdminActions() {
   return { pause, unpause, addAdmin, removeAdmin, setThreshold, isPending, isSuccess, error, cancelSignature }
 }
 
+// #549 — useDelegateVote: delegate or revoke vote delegation
+export function useDelegateVote() {
+  const { run, isPending, isSuccess, error, cancelSignature } = useWriteAction()
+  const { address } = useWallet()
+  const delegateVote = (delegatee: string) =>
+    run('Delegating vote', (w) => w.delegateVote(delegatee), [
+      queryKeys.delegate(address ?? ''),
+      queryKeys.votingWeight(address ?? ''),
+    ])
+  const revokeVote = () =>
+    address
+      ? run('Revoking vote delegation', (w) => w.delegateVote(address), [
+          queryKeys.delegate(address),
+          queryKeys.votingWeight(address),
+        ])
+      : Promise.resolve()
+  return { delegateVote, revokeVote, isPending, isSuccess, error, cancelSignature }
 export function usePauserActions() {
   const { run, isPending, isSuccess, error, cancelSignature } = useWriteAction()
   const setPauser = (pauser: string) =>

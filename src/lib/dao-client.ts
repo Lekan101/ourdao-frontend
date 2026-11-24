@@ -557,6 +557,51 @@ export const daoRead = {
   // "fully voted".
   hasVoted: (k: 'Loan' | 'Treasury', proposalId: number, voter: string): Promise<boolean | null> =>
     read('has_voted', { kind: kind(k), proposal_id: proposalId, voter }),
+
+  // #643 — single summary read that feeds all landing stats.
+  // Fetches total members, active members, treasury balance, and total loans
+  // in parallel and returns a combined object; callers get one logical read.
+  getDaoSummary: async (): Promise<{
+    totalMembers: number | null
+    activeMembers: number | null
+    treasuryBalance: bigint | null
+    totalLoans: number | null
+  } | null> => {
+    const [totalMembers, activeMembers, treasuryBalance] = await Promise.all([
+      read<'get_total_members', number>('get_total_members'),
+      read<'get_active_members', number>('get_active_members'),
+      read<'get_treasury_balance', bigint>('get_treasury_balance'),
+    ])
+    return { totalMembers, activeMembers, treasuryBalance, totalLoans: null }
+  },
+
+  // #644 — single overview read for a member profile page.
+  getMemberOverview: async (
+    address: string,
+  ): Promise<{
+    member: Raw<Member> | null
+    stake: bigint | null
+    pendingYield: bigint | null
+    isMember: boolean | null
+    name: string | null
+    delegate: string | null
+  } | null> => {
+    const [member, stake, pendingYield, isMember, name, delegate] = await Promise.all([
+      read<'get_member', Raw<Member>>('get_member', { address }),
+      read<'get_stake', bigint>('get_stake', { member: address }),
+      read<'get_pending_yield', bigint>('get_pending_yield', { member: address }),
+      read<'is_member', boolean>('is_member', { address }),
+      read<'name_of', string>('name_of', { owner: address }),
+      read<'get_delegate', string>('get_delegate', { member: address }),
+    ])
+    return { member, stake, pendingYield, isMember, name, delegate }
+  },
+
+  // #549 — delegation reads.
+  getDelegate: (member: string): Promise<string | null> =>
+    read('get_delegate', { member }),
+  getVotingWeight: (member: string): Promise<bigint | null> =>
+    read('get_voting_weight', { member }),
   getDaoSummary: (): Promise<Record<string, unknown> | null> => read('get_dao_summary'),
   getMemberOverview: (member: string): Promise<Record<string, unknown> | null> =>
     read('get_member_overview', { member }),
@@ -673,6 +718,11 @@ export function daoWrite(
       send('unstake', { member: address, amount: BigInt(amount) }),
 
     registerName: (name: string) => send('register_name', { owner: address, name }),
+
+    // #549 — delegate this member's vote to `delegatee`; pass the connected
+    // wallet address as `delegatee` to revoke (self-delegation clears it).
+    delegateVote: (delegatee: string) =>
+      send('delegate_vote', { delegator: address, delegatee }),
 
     commitTreasuryVote: (proposalId: number, commitment: Uint8Array) =>
       send('commit_treasury_vote', {

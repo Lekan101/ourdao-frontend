@@ -1,15 +1,24 @@
 'use client'
 
-import { useDAOStats, useDAOEvents } from '@/hooks/useDAO'
+import { useDaoSummary } from '@/hooks/dao/reads'
 import { useToken } from '@/hooks/useToken'
+import { useDAOEvents } from '@/hooks/useDAO'
 import { Users, Shield, BarChart3, CreditCard } from 'lucide-react'
 
+// #643: feeds all landing stats from a single getDaoSummary read.
+// Falls back to null/zero values when the read fails so the section
+// always renders rather than disappearing silently.
 export function LandingStats() {
-  const stats = useDAOStats()
+  const { summary, isError } = useDaoSummary()
   const token = useToken()
-  useDAOEvents() // Start listening for events
+  useDAOEvents()
 
-  if (!stats.initialized) {
+  const totalMembers = summary?.totalMembers ?? 0
+  const activeMembers = summary?.activeMembers ?? 0
+  const treasuryBalance = summary?.treasuryBalance ?? BigInt(0)
+  const totalLoans = summary?.totalLoans ?? 0
+
+  if (!summary && !isError) {
     return null
   }
 
@@ -30,7 +39,7 @@ export function LandingStats() {
             <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 dark:bg-primary-950/50">
               <Users className="h-8 w-8 text-primary-600 dark:text-primary-400" aria-hidden="true" />
             </div>
-            <dt className="text-4xl font-bold text-primary-600 dark:text-primary-400">{stats.totalMembers}</dt>
+            <dt className="text-4xl font-bold text-primary-600 dark:text-primary-400">{totalMembers}</dt>
             <dd className="mt-2 text-base font-medium text-muted-foreground">Total Members</dd>
           </div>
 
@@ -38,7 +47,7 @@ export function LandingStats() {
             <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-green-50 dark:bg-green-950/50">
               <Shield className="h-8 w-8 text-green-600 dark:text-green-400" aria-hidden="true" />
             </div>
-            <dt className="text-4xl font-bold text-green-600 dark:text-green-400">{stats.activeMembers}</dt>
+            <dt className="text-4xl font-bold text-green-600 dark:text-green-400">{activeMembers}</dt>
             <dd className="mt-2 text-base font-medium text-muted-foreground">Active Members</dd>
           </div>
 
@@ -46,7 +55,7 @@ export function LandingStats() {
             <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/50">
               <BarChart3 className="h-8 w-8 text-blue-600 dark:text-blue-400" aria-hidden="true" />
             </div>
-            <dt className="text-4xl font-bold text-blue-600 dark:text-blue-400">{token.format(stats.treasuryBalance)}</dt>
+            <dt className="text-4xl font-bold text-blue-600 dark:text-blue-400">{token.format(treasuryBalance)}</dt>
             <dd className="mt-2 text-base font-medium text-muted-foreground">Treasury Balance</dd>
           </div>
 
@@ -54,7 +63,7 @@ export function LandingStats() {
             <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-orange-50 dark:bg-orange-950/50">
               <CreditCard className="h-8 w-8 text-orange-600 dark:text-orange-400" aria-hidden="true" />
             </div>
-            <dt className="text-4xl font-bold text-orange-600 dark:text-orange-400">{stats.totalLoans}</dt>
+            <dt className="text-4xl font-bold text-orange-600 dark:text-orange-400">{totalLoans}</dt>
             <dd className="mt-2 text-base font-medium text-muted-foreground">Loans Funded</dd>
           </div>
         </dl>
