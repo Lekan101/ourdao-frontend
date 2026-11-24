@@ -20,7 +20,7 @@ report can name the entry below it came from. See
 ## [Unreleased]
 
 ### Added
-- Live DAO updates refresh affected pages as indexer events arrive. The app header shows connection status, and covered queries return to polling during an outage. Private notifications keep polling (#554).
+
 - A **Fund now** (loan) / **Execute** (treasury withdrawal) action on proposals that passed their vote while the treasury was short, so any member can complete them once the treasury is topped up; contract failures such as `InsufficientTreasury` are shown in plain language (#540).
 - A test guard that fails when a DOM-touching test file lands without `// @vitest-environment jsdom` (#539).
 - Per-module coverage floors for `dao-client.ts` and `wallet.tsx`, tests for every `daoWrite` entrypoint and the wallet connect/restore/sign flows, and a coverage provider pin matching the installed vitest (#327, #328, #329).
@@ -37,6 +37,7 @@ report can name the entry below it came from. See
 - Connect with xBull, Albedo, LOBSTR, hardware wallets and more through Stellar Wallets Kit ("More wallets" next to Connect Wallet); Freighter stays the default (#344).
 
 ### Changed
+
 - The dashboard's voting weight is the value the contract reports from `get_voting_weight`, so delegation is reflected. The local stake estimate shows only while the read is pending, and a failed read shows as unavailable rather than zero (#603).
 - Dependency audit: `uuid` is pinned via a `package.json` `overrides` entry inside `jayson`, clearing the `uuid` advisory that arrived with the optional HOT wallet SDK. The findings that remain — `stream-json` (no compatible fixed version; jayson needs its `streamers/StreamValues` subpath) and the rest of the HOT subtree — are allowlisted in `audit-ci.jsonc` with an expiry and a reachability note, and a bundle check asserts that subtree is absent from client chunks (#478).
 - Contract method names and argument shapes are now compile-checked against TypeScript bindings generated from the contract wasm (`npm run gen:contract`), and arguments are encoded from the contract spec instead of hand-built. This surfaced and fixes drift: the member join time field is `join_time`, not `join_ledger` (#343).
@@ -77,6 +78,7 @@ Backend: ourdao-backend unversioned (main; no tagged release to pin yet)
 Contracts: ourdao-contracts @ 00b0c62
 
 ### Added
+
 - Offline handling and a cleaned-up installable PWA manifest (#296).
 - A network badge in the header showing which Stellar network the wallet is on (#165).
 - Partial loan repayment (#162).
@@ -91,6 +93,7 @@ Contracts: ourdao-contracts @ 00b0c62
 - Explorer links for transactions and accounts (#95).
 
 ### Changed
+
 - Documents are closed by default and the loan policy is read on-chain
   instead of from constants (#284).
 - Maximum loan amount is derived from the treasury balance; the unused
@@ -103,6 +106,7 @@ Contracts: ourdao-contracts @ 00b0c62
   signature requests time out instead of hanging (#285).
 
 ### Fixed
+
 - Dates are formatted in the member's locale (#291).
 - Token amounts display and parse without precision loss (#62, #286).
 - Vote controls are disabled once a member has already voted (#118).
@@ -119,6 +123,7 @@ Contracts: ourdao-contracts @ 00b0c62
   prefers-reduced-motion (#127), and icon-only controls have accessible names (#93).
 
 ### Removed
+
 - Fabricated team, testimonial, and statistics content from the landing page.
 
 [Unreleased]: https://github.com/ourdao/ourdao-frontend/compare/v0.1.0...HEAD

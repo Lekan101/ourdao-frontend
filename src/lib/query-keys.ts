@@ -63,6 +63,13 @@ export const queryKeys = {
   notificationsDisabled: () => [...queryKeyPrefixes.notifications, null] as const,
   activity: (limit: number) => [...queryKeyPrefixes.activity, limit] as const,
   failedEvents: () => ['failedEvents'] as const,
+  documentHistory: (kind: string, proposalId: number) =>
+    ['documentHistory', kind, proposalId] as const,
+  loanTimeline: (id: number) => ['loanTimeline', id] as const,
+  treasuryTimeline: (id: number) => ['treasuryTimeline', id] as const,
+  memberSummary: (address: Address) => ['memberSummary', address] as const,
+  memberActivity: (address: Address, limit: number) => ['memberActivity', address, limit] as const,
+  members: (limit: number) => ['members', limit] as const,
   documentHistory: (kind: string, proposalId: number) => [...queryKeyPrefixes.documentHistory, kind, proposalId] as const,
   loanTimeline: (id: number) => [...queryKeyPrefixes.loanTimeline, id] as const,
   treasuryTimeline: (id: number) => [...queryKeyPrefixes.treasuryTimeline, id] as const,

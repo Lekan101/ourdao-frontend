@@ -105,12 +105,17 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number, label: str
 // Everything on the bindings `Client` that the SDK base class doesn't define.
 export type ContractMethod = Exclude<keyof Client, keyof ContractClient>
 
-type MethodParam<M extends ContractMethod> = Client[M] extends (a: infer A, ...r: never[]) => unknown
+type MethodParam<M extends ContractMethod> = Client[M] extends (
+  a: infer A,
+  ...r: never[]
+) => unknown
   ? A
   : never
 
 /** Named-argument object for `M`, or no arguments for parameterless methods. */
-export type CallArgs<M extends ContractMethod> = [MethodParam<M>] extends [MethodOptions | undefined]
+export type CallArgs<M extends ContractMethod> = [MethodParam<M>] extends [
+  MethodOptions | undefined,
+]
   ? []
   : [args: MethodParam<M>]
 
@@ -175,7 +180,11 @@ export async function readContract<T = unknown>(
     .setTimeout(30)
     .build()
 
-  const sim = await withTimeout(server.simulateTransaction(tx), READ_TIMEOUT_MS, 'simulateTransaction')
+  const sim = await withTimeout(
+    server.simulateTransaction(tx),
+    READ_TIMEOUT_MS,
+    'simulateTransaction'
+  )
   if (rpc.Api.isSimulationError(sim)) {
     throw new Error(formatContractError(sim.error))
   }
@@ -292,7 +301,6 @@ export class TransactionPendingError extends Error {
   }
 }
 
-
 /**
  * Keep checking a submitted transaction after {@link invoke} has given up
  * waiting for it, so a late confirmation can still be reported as a success
@@ -328,9 +336,7 @@ export async function watchTransaction(
       )
       if (result.status === 'SUCCESS') {
         const confirmed = result as { returnValue?: xdr.ScVal }
-        onConfirmed?.(
-          confirmed.returnValue ? scValToNative(confirmed.returnValue) : null
-        )
+        onConfirmed?.(confirmed.returnValue ? scValToNative(confirmed.returnValue) : null)
         return 'confirmed'
       }
       if (result.status !== 'NOT_FOUND') {
@@ -464,11 +470,7 @@ export async function invoke(
   )
   while (result.status === 'NOT_FOUND' && Date.now() < deadlineMs) {
     await sleep(POLL_INTERVAL_MS)
-    result = await withTimeout(
-      server.getTransaction(sentHash),
-      WRITE_TIMEOUT_MS,
-      'getTransaction'
-    )
+    result = await withTimeout(server.getTransaction(sentHash), WRITE_TIMEOUT_MS, 'getTransaction')
   }
 
   if (result.status === 'NOT_FOUND') {
@@ -620,10 +622,7 @@ export const tokenRead = {
 // Typed write wrappers — bound to a connected wallet + signer
 // ---------------------------------------------------------------------------
 
-export function daoWrite(
-  address: string,
-  signXDR: (xdr: string) => Promise<string>
-) {
+export function daoWrite(address: string, signXDR: (xdr: string) => Promise<string>) {
   const send = <M extends ContractMethod>(method: M, ...args: CallArgs<M>) =>
     invoke(address, signXDR, method, ...encodeArgs(method, ...args))
 
@@ -652,8 +651,7 @@ export function daoWrite(
       }),
     voteOnLoanProposal: (proposalId: number, support: boolean) =>
       send('vote_on_loan_proposal', { voter: address, proposal_id: proposalId, support }),
-    repayLoan: (loanId: number) =>
-      send('repay_loan', { borrower: address, loan_id: loanId }),
+    repayLoan: (loanId: number) => send('repay_loan', { borrower: address, loan_id: loanId }),
     // Partial repayment — amount is applied to accrued interest first, then
     // principal; the interest portion is distributed to active members as
     // yield immediately (see contracts/dao/src/loans.rs). Rejects amount
@@ -666,8 +664,7 @@ export function daoWrite(
       }),
     // Permissionless: the contract takes no caller argument (anyone can
     // trigger this once a loan is overdue past its grace period).
-    markLoanDefaulted: (loanId: number) =>
-      send('mark_loan_defaulted', { loan_id: loanId }),
+    markLoanDefaulted: (loanId: number) => send('mark_loan_defaulted', { loan_id: loanId }),
 
     // Permissionless: moves a loan proposal out of "voting" once its window has
     // passed (#606). Takes only the proposal id.
@@ -712,8 +709,7 @@ export function daoWrite(
         support,
       }),
 
-    stake: (amount: bigint | number) =>
-      send('stake', { member: address, amount: BigInt(amount) }),
+    stake: (amount: bigint | number) => send('stake', { member: address, amount: BigInt(amount) }),
     unstake: (amount: bigint | number) =>
       send('unstake', { member: address, amount: BigInt(amount) }),
 

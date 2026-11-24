@@ -122,7 +122,13 @@ describe('DashboardPage membership redirect', () => {
   })
   it('#230: a failed membership read is a load error, not "not a member" — no redirect, retry offered', async () => {
     const refetch = vi.fn()
-    mockUserData.mockReturnValue({ ...baseUserData, isLoading: false, isMember: false, isError: true, refetch })
+    mockUserData.mockReturnValue({
+      ...baseUserData,
+      isLoading: false,
+      isMember: false,
+      isError: true,
+      refetch,
+    })
     await renderDashboard()
     expect(mockReplace).not.toHaveBeenCalled()
     expect(mockPush).not.toHaveBeenCalled()

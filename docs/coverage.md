@@ -19,9 +19,9 @@ installed `vitest` version (a 4.x provider against vitest 5 crashes the run).
 
 ## How to read the report
 
-- With Node 24.15 or later and dependencies installed by `npm ci`,
-  `npm run coverage` prints a per-file table and writes
-  `coverage/coverage-summary.json` and `coverage/index.html`.
+- `npm run coverage` locally (after `npm install --no-save
+@vitest/coverage-v8@5.0.5`) prints a per-file table and writes
+  `coverage/coverage-summary.json` + `coverage/index.html`.
 - In CI, the same summary is appended to the job output under
   “Coverage summary” with a per-file `<details>` block.
 
