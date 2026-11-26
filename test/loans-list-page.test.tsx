@@ -86,7 +86,6 @@ vi.mock('@/lib/dao-client', () => ({
   },
   daoWrite: () => ({
     voteOnLoanProposal: vi.fn().mockResolvedValue({ hash: 'tx', returnValue: null }),
-    expireLoanProposal: (...a: unknown[]) => mockExpireLoanProposal(...a),
   }),
 }))
 

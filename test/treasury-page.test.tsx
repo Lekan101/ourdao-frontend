@@ -139,7 +139,7 @@ describe('TreasuryPage', () => {
     vi.useRealTimers()
   })
 
-  it('renders the real treasury balance and the connected member\'s own stake', async () => {
+  it("renders the real treasury balance and the connected member's own stake", async () => {
     renderWithProviders(<TreasuryPage />)
 
     await waitFor(() => expect(screen.getByText('900 OUSD')).toBeInTheDocument())

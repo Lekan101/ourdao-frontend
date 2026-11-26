@@ -51,6 +51,7 @@ vi.mock('@/hooks/useDAO', () => ({
   useExpireProposal: () => ({ expireTreasuryProposal: vi.fn(), isPending: false }),
   useHasVoted: () => ({ hasVoted: false }),
   useToken: () => mockToken,
+  useVotingWeight: () => ({ votingWeight: 4, isLoading: false, isError: false, refetch: vi.fn() }),
 }))
 
 vi.mock('@/hooks/useProposalFilters', () => ({

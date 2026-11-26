@@ -163,7 +163,7 @@ describe('AdminPage', () => {
       await waitFor(() => expect(screen.getByText('Admin Dashboard')).toBeInTheDocument())
       fireEvent.click(screen.getByRole('button', { name: /Governance/ }))
       await waitFor(() =>
-        expect(screen.getByPlaceholderText('G… address to add as admin')).toBeInTheDocument(),
+        expect(screen.getByPlaceholderText('G… address to add as admin')).toBeInTheDocument()
       )
     }
 
@@ -176,7 +176,7 @@ describe('AdminPage', () => {
       const submit = screen.getByRole('button', { name: 'Add Admin' })
       expect(submit).toBeDisabled()
       expect(
-        screen.getByText('Enter a valid Stellar destination address (G… or C…)'),
+        screen.getByText('Enter a valid Stellar destination address (G… or C…)')
       ).toBeInTheDocument()
 
       fireEvent.click(submit)
@@ -208,7 +208,7 @@ describe('AdminPage', () => {
       })
 
       expect(
-        screen.queryByText('Enter a valid Stellar destination address (G… or C…)'),
+        screen.queryByText('Enter a valid Stellar destination address (G… or C…)')
       ).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Add Admin' })).not.toBeDisabled()
     })
@@ -237,7 +237,7 @@ describe('AdminPage', () => {
       await waitFor(() => expect(screen.getByText('Admin Dashboard')).toBeInTheDocument())
       fireEvent.click(screen.getByRole('button', { name: /Governance/ }))
       await waitFor(() =>
-        expect(screen.getByPlaceholderText('G… address to add as admin')).toBeInTheDocument(),
+        expect(screen.getByPlaceholderText('G… address to add as admin')).toBeInTheDocument()
       )
     }
 
@@ -264,7 +264,9 @@ describe('AdminPage', () => {
       mockSetThreshold.mockRejectedValue(new Error('User declined'))
       await openGovernanceTab()
 
-      fireEvent.change(screen.getByPlaceholderText('e.g. 5100 for 51%'), { target: { value: '5100' } })
+      fireEvent.change(screen.getByPlaceholderText('e.g. 5100 for 51%'), {
+        target: { value: '5100' },
+      })
       fireEvent.click(screen.getByRole('button', { name: 'Update Threshold' }))
 
       await waitFor(() => expect(mockSetThreshold).toHaveBeenCalledWith(5100))
@@ -276,7 +278,9 @@ describe('AdminPage', () => {
     it('rejects a non-integer threshold before any signing', async () => {
       await openGovernanceTab()
 
-      fireEvent.change(screen.getByPlaceholderText('e.g. 5100 for 51%'), { target: { value: '5100.5' } })
+      fireEvent.change(screen.getByPlaceholderText('e.g. 5100 for 51%'), {
+        target: { value: '5100.5' },
+      })
       fireEvent.click(screen.getByRole('button', { name: 'Update Threshold' }))
       await settle()
 

@@ -17,8 +17,10 @@ import {
   useAdminActions,
   useAdminLog,
   useFailedEvents,
-  useReEvaluateFailedEvent,
-  useBatchResolveFailedEvents,
+  usePauserActions,
+  usePolicyUpdateActions,
+  usePendingPolicyUpdate,
+  useRawLoanPolicy,
 } from '@/hooks/useDAO'
 import type { FailedEventResolution } from '@/lib/backend'
 import { AddressLink } from '@/components/AddressLink'
@@ -29,14 +31,21 @@ import { formatStellarAddress, isStellarAddress } from '@/lib/stellar'
 import { LoadingSpinner } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/ui/stat-card'
+import { useNow } from '@/hooks/useNow'
+import type { LoanPolicy } from '@/lib/dao-client'
 
-type Tab = 'overview' | 'governance' | 'activity' | 'quarantined'
+type Tab = 'overview' | 'governance' | 'policy' | 'activity' | 'quarantined'
 
 const TABS: { id: Tab; name: string; icon: ReactNode }[] = [
   { id: 'overview', name: 'Overview', icon: <ChartBarIcon className="h-4 w-4" /> },
   { id: 'governance', name: 'Governance', icon: <UsersIcon className="h-4 w-4" /> },
+  { id: 'policy', name: 'Policy & Pauser', icon: <ShieldCheckIcon className="h-4 w-4" /> },
   { id: 'activity', name: 'Activity Log', icon: <ClockIcon className="h-4 w-4" /> },
-  { id: 'quarantined', name: 'Quarantined Events', icon: <ExclamationTriangleIcon className="h-4 w-4" /> },
+  {
+    id: 'quarantined',
+    name: 'Quarantined Events',
+    icon: <ExclamationTriangleIcon className="h-4 w-4" />,
+  },
 ]
 
 export default function AdminPage() {
@@ -47,7 +56,9 @@ export default function AdminPage() {
   if (!userData.isConnected) {
     return (
       <GuardMessage
-        icon={<ExclamationTriangleIcon className="h-12 w-12 text-yellow-500 dark:text-yellow-400 mx-auto mb-4" />}
+        icon={
+          <ExclamationTriangleIcon className="mx-auto mb-4 h-12 w-12 text-yellow-500 dark:text-yellow-400" />
+        }
         title="Wallet Not Connected"
         message="Please connect your wallet to access the admin panel."
       />
@@ -70,10 +81,7 @@ export default function AdminPage() {
     // isAdmin reads false when the read fails — "Access Denied" would be a lie.
     return (
       <div className="mx-auto mt-8 max-w-md">
-        <LoadError
-          what="your admin status"
-          onRetry={userData.refetch}
-        />
+        <LoadError what="your admin status" onRetry={userData.refetch} />
       </div>
     )
   }
@@ -81,7 +89,9 @@ export default function AdminPage() {
   if (!userData.isAdmin) {
     return (
       <GuardMessage
-        icon={<ExclamationTriangleIcon className="h-12 w-12 text-red-500 dark:text-red-400 mx-auto mb-4" />}
+        icon={
+          <ExclamationTriangleIcon className="mx-auto mb-4 h-12 w-12 text-red-500 dark:text-red-400" />
+        }
         title="Access Denied"
         message="You need admin privileges to access this panel."
       />
@@ -92,25 +102,27 @@ export default function AdminPage() {
     <>
       <PageHeader title="Admin Dashboard" subtitle="Real-time DAO governance and system state." />
       {stats.quarantinedEvents > 0 ? (
-        <div className="max-w-7xl mx-auto mb-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-600 dark:text-amber-400">
+        <div className="mx-auto mb-6 flex max-w-7xl items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-amber-600 dark:text-amber-400">
           <ExclamationTriangleIcon className="h-5 w-5 shrink-0" />
           <div className="text-sm">
-            <span className="font-semibold">Warning:</span> {stats.quarantinedEvents} quarantined event(s) detected. Handlers failed to process these events; some indexer data may be delayed or incomplete. Check the <strong>Quarantined Events</strong> tab for details.
+            <span className="font-semibold">Warning:</span> {stats.quarantinedEvents} quarantined
+            event(s) detected. Handlers failed to process these events; some indexer data may be
+            delayed or incomplete. Check the <strong>Quarantined Events</strong> tab for details.
           </div>
         </div>
       ) : null}
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-card rounded-lg shadow border border-border">
-          <div className="border-b border-border">
+      <div className="mx-auto max-w-7xl">
+        <div className="bg-card border-border rounded-lg border shadow">
+          <div className="border-border border-b">
             <nav className="flex space-x-8 px-6">
               {TABS.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 py-4 text-sm font-medium border-b-2 ${
+                  className={`flex items-center space-x-2 border-b-2 py-4 text-sm font-medium ${
                     activeTab === tab.id
                       ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                      : 'text-muted-foreground hover:text-foreground border-transparent'
                   }`}
                 >
                   {tab.icon}
@@ -122,6 +134,7 @@ export default function AdminPage() {
           <div className="p-6">
             {activeTab === 'overview' && <OverviewTab stats={stats} />}
             {activeTab === 'governance' && <GovernanceTab stats={stats} />}
+            {activeTab === 'policy' && <PolicyPauserTab />}
             {activeTab === 'activity' && <ActivityTab />}
             {activeTab === 'quarantined' && <QuarantinedEventsTab />}
           </div>
@@ -131,18 +144,25 @@ export default function AdminPage() {
   )
 }
 
-function GuardMessage({ icon, title, message }: { icon: ReactNode; title: string; message: string }) {
+function GuardMessage({
+  icon,
+  title,
+  message,
+}: {
+  icon: ReactNode
+  title: string
+  message: string
+}) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="bg-card rounded-lg p-6 text-center">
         {icon}
-        <h2 className="text-xl font-semibold text-foreground mb-2">{title}</h2>
+        <h2 className="text-foreground mb-2 text-xl font-semibold">{title}</h2>
         <p className="text-muted-foreground">{message}</p>
       </div>
     </div>
   )
 }
-
 
 function OverviewTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
   const { pause, unpause, isPending } = useAdminActions()
@@ -150,20 +170,30 @@ function OverviewTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
   return (
     <div className="space-y-6">
       <div
-        className={`rounded-lg p-6 border ${
-          stats.isPaused ? 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900' : 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-900'
+        className={`rounded-lg border p-6 ${
+          stats.isPaused
+            ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+            : 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30'
         }`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className={`p-2 rounded-full ${stats.isPaused ? 'bg-red-100 dark:bg-red-900/40' : 'bg-green-100 dark:bg-green-900/40'}`}>
-              <ShieldCheckIcon className={`h-6 w-6 ${stats.isPaused ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
+            <div
+              className={`rounded-full p-2 ${stats.isPaused ? 'bg-red-100 dark:bg-red-900/40' : 'bg-green-100 dark:bg-green-900/40'}`}
+            >
+              <ShieldCheckIcon
+                className={`h-6 w-6 ${stats.isPaused ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}
+              />
             </div>
             <div>
-              <h3 className={`text-lg font-semibold ${stats.isPaused ? 'text-red-900 dark:text-red-300' : 'text-green-900 dark:text-green-300'}`}>
+              <h3
+                className={`text-lg font-semibold ${stats.isPaused ? 'text-red-900 dark:text-red-300' : 'text-green-900 dark:text-green-300'}`}
+              >
                 Contract is {stats.isPaused ? 'Paused' : 'Active'}
               </h3>
-              <p className={`text-sm ${stats.isPaused ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+              <p
+                className={`text-sm ${stats.isPaused ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}
+              >
                 {stats.isPaused
                   ? 'All state-changing operations are currently blocked on-chain.'
                   : 'Members can register, vote, and transact normally.'}
@@ -173,27 +203,49 @@ function OverviewTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
           <button
             onClick={() => {
               if (stats.isPaused) {
-                if (!window.confirm('Unpause the DAO? This will re-enable all state-changing operations for every member.')) return
+                if (
+                  !window.confirm(
+                    'Unpause the DAO? This will re-enable all state-changing operations for every member.'
+                  )
+                )
+                  return
                 unpause().catch(() => {})
               } else {
-                if (!window.confirm('Pause the DAO? This will halt new loans, votes, and proposals for every member immediately.')) return
+                if (
+                  !window.confirm(
+                    'Pause the DAO? This will halt new loans, votes, and proposals for every member immediately.'
+                  )
+                )
+                  return
                 pause().catch(() => {})
               }
             }}
             disabled={isPending}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-white disabled:opacity-50 ${
+            className={`flex items-center space-x-2 rounded-md px-4 py-2 text-white disabled:opacity-50 ${
               stats.isPaused ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
             }`}
           >
-            {stats.isPaused ? <PlayIcon className="h-4 w-4" /> : <ExclamationTriangleIcon className="h-4 w-4" />}
+            {stats.isPaused ? (
+              <PlayIcon className="h-4 w-4" />
+            ) : (
+              <ExclamationTriangleIcon className="h-4 w-4" />
+            )}
             <span>{stats.isPaused ? 'Unpause' : 'Pause'}</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard label="Active Members" value={stats.activeMembers.toLocaleString()} sub={`${stats.totalMembers} total ever joined`} />
-        <StatCard label="Active Loans" value={stats.activeLoans.toLocaleString()} sub={`${stats.totalLoans} total`} />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Active Members"
+          value={stats.activeMembers.toLocaleString()}
+          sub={`${stats.totalMembers} total ever joined`}
+        />
+        <StatCard
+          label="Active Loans"
+          value={stats.activeLoans.toLocaleString()}
+          sub={`${stats.totalLoans} total`}
+        />
         <StatCard label="Treasury Balance" value={formatToken(stats.treasuryBalance)} />
         <StatCard label="Consensus Threshold" value={formatThreshold(stats.consensusThreshold)} />
       </div>
@@ -218,7 +270,12 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
   const submitAddAdmin = async (e: FormEvent) => {
     e.preventDefault()
     if (!trimmedNewAdmin || !isStellarAddress(trimmedNewAdmin)) return
-    if (!window.confirm(`Add ${formatStellarAddress(trimmedNewAdmin)} as an admin? This grants full admin privileges.`)) return
+    if (
+      !window.confirm(
+        `Add ${formatStellarAddress(trimmedNewAdmin)} as an admin? This grants full admin privileges.`
+      )
+    )
+      return
     // `run` already toasted the failure; it rethrows for callers that need to
     // react, but a form handler has nothing to add, so swallow it here (#316).
     try {
@@ -234,7 +291,12 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
     e.preventDefault()
     const bps = Number(threshold)
     if (!Number.isInteger(bps) || bps <= 0 || bps > 10_000) return
-    if (!window.confirm(`Update consensus threshold from ${formatThreshold(stats.consensusThreshold)} to ${formatThreshold(bps)}? This changes the approval bar for every open proposal.`)) return
+    if (
+      !window.confirm(
+        `Update consensus threshold from ${formatThreshold(stats.consensusThreshold)} to ${formatThreshold(bps)}? This changes the approval bar for every open proposal.`
+      )
+    )
+      return
     try {
       await setThreshold(bps)
     } catch {
@@ -245,19 +307,26 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-card rounded-lg border border-border">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-foreground">Admins ({admins.length})</h3>
+      <div className="bg-card border-border rounded-lg border">
+        <div className="border-border flex items-center justify-between border-b px-6 py-4">
+          <h3 className="text-foreground text-lg font-semibold">Admins ({admins.length})</h3>
         </div>
-        <div className="divide-y divide-border">
-          {isLoading && <div className="px-6 py-4 text-sm text-muted-foreground">Loading…</div>}
-          {adminsError && <LoadError what="the admin list" onRetry={() => void refetch()} className="m-4" />}
+        <div className="divide-border divide-y">
+          {isLoading && <div className="text-muted-foreground px-6 py-4 text-sm">Loading…</div>}
+          {adminsError && (
+            <LoadError what="the admin list" onRetry={() => void refetch()} className="m-4" />
+          )}
           {admins.map((addr) => (
-            <div key={addr} className="px-6 py-3 flex items-center justify-between">
-              <AddressLink address={addr} className="text-sm text-foreground" />
+            <div key={addr} className="flex items-center justify-between px-6 py-3">
+              <AddressLink address={addr} className="text-foreground text-sm" />
               <button
                 onClick={async () => {
-                  if (!window.confirm(`Remove admin ${formatStellarAddress(addr)}? This action requires a remaining admin to re-add them.`)) return
+                  if (
+                    !window.confirm(
+                      `Remove admin ${formatStellarAddress(addr)}? This action requires a remaining admin to re-add them.`
+                    )
+                  )
+                    return
                   try {
                     await removeAdmin(addr)
                   } catch {
@@ -267,7 +336,7 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
                 }}
                 disabled={isPending || admins.length <= 1}
                 title={admins.length <= 1 ? 'Cannot remove the last admin' : 'Remove admin'}
-                className="flex items-center space-x-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center space-x-1 text-sm text-red-600 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400 dark:hover:text-red-300"
               >
                 <TrashIcon className="h-4 w-4" />
                 <span>Remove</span>
@@ -275,7 +344,10 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
             </div>
           ))}
         </div>
-        <form onSubmit={submitAddAdmin} className="p-6 flex items-start space-x-2 border-t border-border">
+        <form
+          onSubmit={submitAddAdmin}
+          className="border-border flex items-start space-x-2 border-t p-6"
+        >
           <div className="flex-1">
             <input
               type="text"
@@ -284,6 +356,7 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
               placeholder="G… address to add as admin"
               aria-label="Address to add as admin"
               aria-invalid={newAdminError}
+              className="border-input dark:bg-muted dark:text-foreground w-full rounded-md border px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               aria-describedby={newAdminError ? 'new-admin-error' : undefined}
               className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-muted dark:text-foreground"
             />
@@ -296,21 +369,22 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
           <button
             type="submit"
             disabled={isPending || !trimmedNewAdmin || !isStellarAddress(trimmedNewAdmin)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             Add Admin
           </button>
         </form>
       </div>
 
-      <div className="bg-card rounded-lg border border-border">
-        <div className="px-6 py-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground">Consensus Threshold</h3>
-          <p className="text-sm text-muted-foreground">
-            Currently {formatThreshold(stats.consensusThreshold)} of active members, in basis points.
+      <div className="bg-card border-border rounded-lg border">
+        <div className="border-border border-b px-6 py-4">
+          <h3 className="text-foreground text-lg font-semibold">Consensus Threshold</h3>
+          <p className="text-muted-foreground text-sm">
+            Currently {formatThreshold(stats.consensusThreshold)} of active members, in basis
+            points.
           </p>
         </div>
-        <form onSubmit={submitThreshold} className="p-6 flex space-x-2">
+        <form onSubmit={submitThreshold} className="flex space-x-2 p-6">
           <input
             type="number"
             min={1}
@@ -319,17 +393,175 @@ function GovernanceTab({ stats }: { stats: ReturnType<typeof useDAOStats> }) {
             onChange={(e) => setThresholdInput(e.target.value)}
             aria-label="Consensus threshold in basis points"
             placeholder="e.g. 5100 for 51%"
-            className="flex-1 px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-muted dark:text-foreground"
+            className="border-input dark:bg-muted dark:text-foreground flex-1 rounded-md border px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
           />
           <button
             type="submit"
             disabled={isPending || !threshold}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             Update Threshold
           </button>
         </form>
-        {isSuccess && <p className="px-6 pb-4 text-sm text-green-600 dark:text-green-400">Updated.</p>}
+        {isSuccess && (
+          <p className="px-6 pb-4 text-sm text-green-600 dark:text-green-400">Updated.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PolicyPauserTab() {
+  const { setPauser, revokePauser, isPending: pauserPending } = usePauserActions()
+  const { proposePolicyUpdate, executePolicyUpdate, cancelPolicyUpdate, isPending: policyPending } = usePolicyUpdateActions()
+  const [pauserAddr, setPauserAddr] = useState('')
+  const [maxAmount, setMaxAmount] = useState('')
+  const [interestBps, setInterestBps] = useState('')
+  const [maxDuration, setMaxDuration] = useState('')
+
+  const submitSetPauser = async (e: FormEvent) => {
+    e.preventDefault()
+    const addr = pauserAddr.trim()
+    if (!addr) return
+    if (!window.confirm(`Grant pause rights to ${addr}?`)) return
+    try { await setPauser(addr) } catch { return }
+    setPauserAddr('')
+  }
+
+  const submitRevokePauser = async () => {
+    if (!window.confirm('Revoke the current pauser role?')) return
+    try { await revokePauser() } catch { return }
+  }
+
+  const submitPropose = async (e: FormEvent) => {
+    e.preventDefault()
+    const amount = Number(maxAmount)
+    const bps = Number(interestBps)
+    const dur = Number(maxDuration)
+    if (!amount || !bps || !dur) return
+    if (!window.confirm(`Propose policy update: max loan ${amount}, interest ${bps} bps, duration ${dur} ledgers?`)) return
+    try {
+      await proposePolicyUpdate({
+        max_loan_amount: BigInt(amount),
+        interest_rate_bps: bps,
+        max_loan_duration_ledgers: dur,
+      } as any)
+    } catch { return }
+    setMaxAmount(''); setInterestBps(''); setMaxDuration('')
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Pauser role */}
+      <div className="bg-card rounded-lg border border-border">
+        <div className="px-6 py-4 border-b border-border">
+          <h3 className="text-lg font-semibold text-foreground">Pauser Role</h3>
+          <p className="text-sm text-muted-foreground">Grant or revoke the right to pause the DAO without full admin privileges.</p>
+        </div>
+        <form onSubmit={submitSetPauser} className="p-6 flex items-start space-x-2">
+          <input
+            type="text"
+            value={pauserAddr}
+            onChange={(e) => setPauserAddr(e.target.value)}
+            placeholder="G… address to grant pauser role"
+            aria-label="Pauser address"
+            className="flex-1 px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-muted dark:text-foreground"
+          />
+          <button
+            type="submit"
+            disabled={pauserPending || !pauserAddr.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            Set Pauser
+          </button>
+        </form>
+        <div className="px-6 pb-6">
+          <button
+            onClick={submitRevokePauser}
+            disabled={pauserPending}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+          >
+            Revoke Pauser
+          </button>
+        </div>
+      </div>
+
+      {/* Policy update flow */}
+      <div className="bg-card rounded-lg border border-border">
+        <div className="px-6 py-4 border-b border-border">
+          <h3 className="text-lg font-semibold text-foreground">Loan Policy Update</h3>
+          <p className="text-sm text-muted-foreground">Propose, execute, or cancel the governed policy-update flow.</p>
+        </div>
+        <form onSubmit={submitPropose} className="p-6 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Max Loan Amount</label>
+              <input
+                type="number"
+                min={1}
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+                placeholder="stroops"
+                aria-label="Max loan amount in stroops"
+                className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-muted dark:text-foreground"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Interest Rate (bps)</label>
+              <input
+                type="number"
+                min={1}
+                max={10000}
+                value={interestBps}
+                onChange={(e) => setInterestBps(e.target.value)}
+                placeholder="e.g. 500 = 5%"
+                aria-label="Interest rate in basis points"
+                className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-muted dark:text-foreground"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Max Duration (ledgers)</label>
+              <input
+                type="number"
+                min={1}
+                value={maxDuration}
+                onChange={(e) => setMaxDuration(e.target.value)}
+                placeholder="ledgers"
+                aria-label="Max loan duration in ledgers"
+                className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-muted dark:text-foreground"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={policyPending || !maxAmount || !interestBps || !maxDuration}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            Propose Update
+          </button>
+        </form>
+        <div className="px-6 pb-6 flex space-x-3">
+          <button
+            onClick={async () => {
+              if (!window.confirm('Execute the pending policy update?')) return
+              try { await executePolicyUpdate() } catch { return }
+            }}
+            disabled={policyPending}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+          >
+            Execute Update
+          </button>
+          <button
+            onClick={async () => {
+              if (!window.confirm('Cancel the pending policy update?')) return
+              try { await cancelPolicyUpdate() } catch { return }
+            }}
+            disabled={policyPending}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+          >
+            Cancel Update
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -340,32 +572,36 @@ function ActivityTab() {
   useAnnounceLoad('Admin event history', isLoading, isError)
 
   return (
-    <div className="bg-card rounded-lg border border-border">
-      <div className="px-6 py-4 border-b border-border">
-        <h3 className="text-lg font-semibold text-foreground">
-          Admin/Governance Event History
-        </h3>
-        <p className="text-sm text-muted-foreground">
+    <div className="bg-card border-border rounded-lg border">
+      <div className="border-border border-b px-6 py-4">
+        <h3 className="text-foreground text-lg font-semibold">Admin/Governance Event History</h3>
+        <p className="text-muted-foreground text-sm">
           Indexed on-chain events: admin add/remove, threshold and policy changes, pause/unpause.
         </p>
       </div>
-      <div className="divide-y divide-border">
-        {isLoading && <div className="px-6 py-4 text-sm text-muted-foreground">Loading…</div>}
-        {isError && <LoadError what="the admin event history" onRetry={() => void refetch()} className="m-4" />}
+      <div className="divide-border divide-y">
+        {isLoading && <div className="text-muted-foreground px-6 py-4 text-sm">Loading…</div>}
+        {isError && (
+          <LoadError
+            what="the admin event history"
+            onRetry={() => void refetch()}
+            className="m-4"
+          />
+        )}
         {!isLoading && !isError && entries.length === 0 && (
-          <div className="px-6 py-8 text-center text-muted-foreground">
+          <div className="text-muted-foreground px-6 py-8 text-center">
             No admin/governance events indexed yet.
           </div>
         )}
         {entries.map((entry) => (
-          <div key={entry.id} className="px-6 py-3 flex items-center justify-between">
+          <div key={entry.id} className="flex items-center justify-between px-6 py-3">
             <div className="flex items-center space-x-3">
-              <span className="px-2 py-1 text-xs font-mono bg-muted text-foreground rounded">
+              <span className="bg-muted text-foreground rounded px-2 py-1 font-mono text-xs">
                 {entry.symbol}
               </span>
-              <span className="text-sm text-foreground">Ledger {entry.ledger}</span>
+              <span className="text-foreground text-sm">Ledger {entry.ledger}</span>
             </div>
-            <span className="text-xs text-muted-foreground">{formatDate(entry.closedAt)}</span>
+            <span className="text-muted-foreground text-xs">{formatDate(entry.closedAt)}</span>
           </div>
         ))}
       </div>
@@ -418,144 +654,183 @@ function QuarantinedEventsTab() {
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border">
-      <div className="px-6 py-4 border-b border-border">
-        <h3 className="text-lg font-semibold text-foreground">
-          Quarantined / Failed Events
-        </h3>
-        <p className="text-sm text-muted-foreground">
+    <div className="bg-card border-border rounded-lg border">
+      <div className="border-border border-b px-6 py-4">
+        <h3 className="text-foreground text-lg font-semibold">Quarantined / Failed Events</h3>
+        <p className="text-muted-foreground text-sm">
           Events that failed indexer handler processing and are quarantined for investigation.
         </p>
       </div>
-      {(reEvaluateError || batchError) && (
-        <p role="alert" className="mx-6 mt-4 text-sm text-red-600 dark:text-red-400">
-          {reEvaluateError ?? batchError}
-        </p>
-      )}
-      {batchResult && (
-        <p role="status" className="mx-6 mt-4 text-sm text-green-600 dark:text-green-400">
-          Resolved {batchResult.resolved} event(s). Already-resolved events were skipped.
-        </p>
-      )}
-      <form onSubmit={submitBatch} className="px-6 py-4 border-b border-border flex flex-wrap items-end gap-4">
-        <div className="flex items-center gap-2">
-          <input
-            id="select-all-failed-events"
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleAll}
-            disabled={numericIds.length === 0 || isBusy}
-          />
-          <label htmlFor="select-all-failed-events" className="text-sm text-foreground">
-            Select all
-          </label>
-        </div>
-        <fieldset className="flex items-center gap-4">
-          <legend className="sr-only">Resolution</legend>
-          {(['resolved', 'ignored'] as const).map((value) => (
-            <div key={value} className="flex items-center gap-2">
-              <input
-                id={`resolution-${value}`}
-                type="radio"
-                name="resolution"
-                value={value}
-                checked={resolution === value}
-                onChange={() => setResolution(value)}
-                disabled={isBusy}
-              />
-              <label htmlFor={`resolution-${value}`} className="text-sm capitalize text-foreground">
-                {value}
-              </label>
-            </div>
-          ))}
-        </fieldset>
-        <div className="flex items-center gap-2">
-          <label htmlFor="batch-resolve-note" className="text-sm text-foreground">
-            Note (optional)
-          </label>
-          <input
-            id="batch-resolve-note"
-            type="text"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Why these events are being resolved"
-            className="px-3 py-2 border border-input rounded-md bg-background text-sm"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={selectedIds.length === 0 || !resolution || isBusy}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-        >
-          Resolve selected
-        </button>
-      </form>
-      <div className="divide-y divide-border">
-        {isLoading && <div className="px-6 py-4 text-sm text-muted-foreground">Loading quarantined events…</div>}
-        {isError && <LoadError what="quarantined events" onRetry={() => void refetch()} className="m-4" />}
+      <div className="divide-border divide-y">
+        {isLoading && (
+          <div className="text-muted-foreground px-6 py-4 text-sm">Loading quarantined events…</div>
+        )}
+        {isError && (
+          <LoadError what="quarantined events" onRetry={() => void refetch()} className="m-4" />
+        )}
         {!isLoading && !isError && failedEvents.length === 0 && (
-          <div className="px-6 py-8 text-center text-muted-foreground">
+          <div className="text-muted-foreground px-6 py-8 text-center">
             No quarantined events found. All handlers operating cleanly.
           </div>
         )}
-        {failedEvents.map((ev) => {
-          const numericId = Number(ev.id)
-          const selectable = Number.isInteger(numericId) && numericId > 0
-          const outcome =
-            reEvaluateResult && String(reEvaluateResult.eventId) === String(ev.id)
-              ? reEvaluateResult.status === 'still_failing'
-                ? 'Still failing'
-                : `Re-evaluated: ${reEvaluateResult.status}`
-              : null
-          return (
-            <div key={ev.id} className="px-6 py-4 flex flex-col gap-1">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center space-x-3">
-                  {selectable && (
-                    <>
-                      <label htmlFor={`failed-event-${ev.id}`} className="sr-only">
-                        Select event {ev.id}
-                      </label>
-                      <input
-                        id={`failed-event-${ev.id}`}
-                        type="checkbox"
-                        checked={selectedIds.includes(numericId)}
-                        onChange={() => toggleOne(numericId)}
-                      />
-                    </>
-                  )}
-                  <span className="px-2 py-1 text-xs font-mono bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded">
-                    {ev.symbol}
-                  </span>
-                  <span className="text-sm font-medium text-foreground">Ledger #{ev.ledger}</span>
-                  {ev.retry_count !== undefined && (
-                    <span className="text-xs text-muted-foreground">Retries: {ev.retry_count}</span>
-                  )}
-                  {outcome && (
-                    <span role="status" className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                      {outcome}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs text-muted-foreground">{formatDate(ev.created_at)}</span>
-                  <button
-                    type="button"
-                    onClick={() => void reEvaluate(ev.id)}
-                    disabled={isBusy}
-                    className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted disabled:opacity-50"
-                  >
-                    Re-evaluate event {ev.id}
-                  </button>
-                </div>
+        {failedEvents.map((ev) => (
+          <div key={ev.id} className="flex flex-col gap-1 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="rounded bg-red-100 px-2 py-1 font-mono text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                  {ev.symbol}
+                </span>
+                <span className="text-foreground text-sm font-medium">Ledger #{ev.ledger}</span>
+                {ev.retry_count !== undefined && (
+                  <span className="text-muted-foreground text-xs">Retries: {ev.retry_count}</span>
+                )}
               </div>
-              <div className="text-xs font-mono text-red-600 dark:text-red-400 mt-1 bg-red-50 dark:bg-red-950/20 p-2 rounded">
-                {ev.error}
-              </div>
+              <span className="text-muted-foreground text-xs">{formatDate(ev.created_at)}</span>
+            </div>
+            <div className="mt-1 rounded bg-red-50 p-2 font-mono text-xs text-red-600 dark:bg-red-950/20 dark:text-red-400">
+              {ev.error}
             </div>
           )
         })}
       </div>
     </div>
+  )
+}
+
+// Every LoanPolicy field, in the order the contract stores them. Units follow
+// the contract: basis points (bps), seconds (s), or stroops for the membership fee.
+const POLICY_FIELDS: { key: keyof LoanPolicy; label: string }[] = [
+  { key: 'min_interest_rate', label: 'Min interest rate (bps)' },
+  { key: 'max_interest_rate', label: 'Max interest rate (bps)' },
+  { key: 'max_loan_duration', label: 'Max loan duration (s)' },
+  { key: 'max_loan_to_treasury_ratio', label: 'Max loan to treasury ratio (bps)' },
+  { key: 'membership_contribution', label: 'Membership contribution (stroops)' },
+  { key: 'min_membership_duration', label: 'Min membership duration (s)' },
+  { key: 'cooldown_period', label: 'Cooldown period (s)' },
+  { key: 'editing_period', label: 'Editing period (s)' },
+  { key: 'voting_period', label: 'Voting period (s)' },
+  { key: 'quorum_bps', label: 'Quorum (bps)' },
+  { key: 'default_grace_period', label: 'Default grace period (s)' },
+  { key: 'default_penalty_bps', label: 'Default penalty (bps)' },
+]
+
+function formatPolicyValue(value: unknown): string {
+  return value === undefined || value === null ? '—' : String(value)
+}
+
+function formatTimeLeft(seconds: number): string {
+  if (seconds <= 0) return 'Ready to execute'
+  const days = Math.floor(seconds / 86_400)
+  const hours = Math.floor((seconds % 86_400) / 3_600)
+  const minutes = Math.floor((seconds % 3_600) / 60)
+  if (days === 0 && hours === 0 && minutes === 0) return 'Executable in less than a minute'
+  return `Executable in ${days}d ${hours}h ${minutes}m`
+}
+
+/** Shows a queued policy change beside the live values. Renders nothing when no
+ *  update is pending. Changed fields are marked in text, not only by colour. */
+function PendingPolicyUpdatePanel() {
+  const { pending } = usePendingPolicyUpdate()
+  const current = useRawLoanPolicy()
+  const nowMs = useNow()
+  const { executePolicyUpdate, cancelPolicyUpdate, isPending: busy } = usePolicyUpdateActions()
+
+  if (!pending) return null
+
+  const nowSec = nowMs == null ? null : Math.floor(nowMs / 1000)
+  const timeLeft =
+    nowSec == null ? 'Checking time left…' : formatTimeLeft(pending.executionTime - nowSec)
+  const ready = nowSec != null && nowSec >= pending.executionTime
+
+  const onExecute = async () => {
+    if (!ready) return
+    if (!window.confirm('Execute the pending policy update? The new loan policy applies to every member immediately.')) return
+    try {
+      await executePolicyUpdate()
+    } catch {
+      // `run` has already shown the failure; nothing more to do here.
+    }
+  }
+
+  const onCancel = async () => {
+    if (!window.confirm('Cancel the pending policy update? Its proposed values will be discarded.')) return
+    try {
+      await cancelPolicyUpdate()
+    } catch {
+      // `run` has already shown the failure; nothing more to do here.
+    }
+  }
+
+  return (
+    <section aria-labelledby="pending-policy-heading" className="rounded-lg border border-border bg-card">
+      <div className="px-6 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 id="pending-policy-heading" className="text-lg font-semibold text-foreground">
+            Pending policy update
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Proposed {new Date(pending.proposedAt * 1000).toLocaleString()}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span
+            className={`text-sm font-medium ${
+              ready ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'
+            }`}
+          >
+            {timeLeft}
+          </span>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={!pending || busy}
+            className="px-3 py-2 rounded-md border border-border text-sm text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            Cancel update
+          </button>
+          <button
+            type="button"
+            onClick={onExecute}
+            disabled={!ready || busy}
+            title={ready ? 'Apply the pending update' : 'Available once the timelock has passed'}
+            className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+          >
+            Execute update
+          </button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-muted-foreground">
+              <th scope="col" className="px-6 py-2 font-medium">Setting</th>
+              <th scope="col" className="px-6 py-2 font-medium">Current</th>
+              <th scope="col" className="px-6 py-2 font-medium">Proposed</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {POLICY_FIELDS.map(({ key, label }) => {
+              const before = current?.[key]
+              const proposed = pending.policy[key]
+              const changed = before !== undefined && String(before) !== String(proposed)
+              return (
+                <tr key={key}>
+                  <th scope="row" className="px-6 py-2 text-left font-normal text-foreground">{label}</th>
+                  <td className="px-6 py-2 font-mono text-muted-foreground">{formatPolicyValue(before)}</td>
+                  <td className="px-6 py-2 font-mono text-foreground">
+                    {formatPolicyValue(proposed)}
+                    {changed && (
+                      <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 font-sans text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                        Changed
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
